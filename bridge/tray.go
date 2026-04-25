@@ -27,7 +27,6 @@ func CreateTray(a *App, icon []byte) (trayStart, trayEnd func()) {
 			m.Click(action)
 		}
 
-		// Ensure the tray is still available if rolling-release fails
 		addClickMenuItem("Show", "Show", func() { a.ShowMainWindow() })
 		addClickMenuItem("Restart", "Restart", func() { a.RestartApp() })
 		addClickMenuItem("Exit", "Exit", func() { a.ExitApp() })
@@ -50,10 +49,15 @@ func (a *App) UpdateTrayAndMenus(tray TrayContent, menus []MenuItem) {
 	updateTrayMenus(a, menus)
 }
 
-func createMenuItem(menu MenuItem, a *App, parent *systray.MenuItem) {
+func createMenuItem(menu MenuItem, a *App, parent *systray.MenuItem, depth int, isProxyGroup bool) {
 	if menu.Hidden {
 		return
 	}
+
+	if depth == 0 && (menu.Text == "代理组" || menu.Text == "Proxies" || menu.Text == "Proxy Groups") {
+		isProxyGroup = true
+	}
+
 	switch menu.Type {
 	case "item":
 		var m *systray.MenuItem
@@ -78,8 +82,17 @@ func createMenuItem(menu MenuItem, a *App, parent *systray.MenuItem) {
 			m.Check()
 		}
 
-		for _, child := range menu.Children {
-			createMenuItem(child, a, m)
+		for i, child := range menu.Children {
+			if Env.OS == "linux" && isProxyGroup && depth >= 1 {
+				if i < 15 {
+					createMenuItem(child, a, m, depth+1, isProxyGroup)
+				} else if i == 15 {
+					moreMenu := m.AddSubMenuItem("...", "")
+					moreMenu.Click(func() { a.ShowMainWindow() })
+				}
+				continue
+			}
+			createMenuItem(child, a, m, depth+1, isProxyGroup)
 		}
 	case "separator":
 		systray.AddSeparator()
@@ -106,6 +119,6 @@ func updateTrayMenus(a *App, menus []MenuItem) {
 	systray.ResetMenu()
 
 	for _, menu := range menus {
-		createMenuItem(menu, a, nil)
+		createMenuItem(menu, a, nil, 0, false)
 	}
 }
